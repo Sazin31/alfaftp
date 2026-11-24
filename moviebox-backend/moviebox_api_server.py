@@ -250,7 +250,6 @@ def map_item(src: dict, depth: int = 0):
             action_type = "category"
             if "categoryType=" in dlink:
                 category_id = dlink.split("categoryType=")[1].split("&")[0]
-                # Only use category_id as sid if item has no real subjectId of its own
                 if not sid or sid == "0":
                     sid = category_id
         elif "/playlist/detail" in dlink:
@@ -274,7 +273,6 @@ def map_item(src: dict, depth: int = 0):
         elif "/post/" in dlink or "detailVideo" in dlink:
             action_type = "post"
             if "id=" in dlink:
-                # Extract the post ID from the deepLink
                 extracted_id = dlink.split("id=")[1].split("&")[0]
                 if sid == "0" or not sid:
                     sid = extracted_id
@@ -294,7 +292,6 @@ def map_item(src: dict, depth: int = 0):
     # Aggressive Deep Search for Images
     if not poster_url:
         img_terms = ["image", "img", "thumb", "thumbnail", "poster", "cover", "icon", "banner", "pic", "picture"]
-        # Priority 1: Check standard nested objects
         for term in img_terms:
             val = item.get(term)
             if isinstance(val, dict) and val.get("url"):
@@ -304,7 +301,6 @@ def map_item(src: dict, depth: int = 0):
                 poster_url = val
                 break
         
-        # Priority 2: Check keys with _url or _path suffix
         if not poster_url:
             for k, v in item.items():
                 if any(t in k.lower() for t in img_terms) and isinstance(v, str) and (v.startswith("http") or v.startswith("//")):
@@ -316,7 +312,6 @@ def map_item(src: dict, depth: int = 0):
         poster_url = hp.get("url") if isinstance(hp, dict) else hp
 
     if not poster_url:
-        # Final fallback - check for a banner object
         banner = item.get("banner")
         if isinstance(banner, dict):
             poster_url = banner.get("image", {}).get("url") or banner.get("url")
@@ -326,7 +321,6 @@ def map_item(src: dict, depth: int = 0):
 
     score = item.get("imdbRatingValue") or item.get("imdbRate") or item.get("starRating") or item.get("score") or "N/A"
     
-    # Year mapping fix using official releaseDate field
     release_date = item.get("releaseDate") or item.get("releaseTime") or item.get("year") or ""
     display_year = release_date[:4] if release_date and len(release_date) >= 4 else "N/A"
 
@@ -347,9 +341,6 @@ def map_item(src: dict, depth: int = 0):
         "episode": item.get("episode") or item.get("ep"),
         "seeTime": item.get("seeTime"),
         "seenStatus": item.get("seenStatus"),
-        # Map ALL variations of favorite/like status across ALL regional API versions
-        # Standard: isFavorite, isLike
-        # Legacy: collected, collectedStatus, is_favorite, fav, is_fav, isCollect
         "likeStatus": 1 if (
             item.get("isFavorite") == 1 or 
             item.get("is_favorite") == 1 or
@@ -380,12 +371,9 @@ def map_item(src: dict, depth: int = 0):
 def get_home(page: int = 1, session_id: Optional[str] = Cookie(None)):
     s = get_session(session_id)
     try:
-        # Category ID 1 corresponds to "Trending", which is the primary "Home" feed in the app.
         res = s["content"].get_categories(category_id=1, page=page)
         data = res.get("data") or {}
         items = data.get("list") or data.get("items") or data.get("subjects") or []
-        
-        # We can format it identically to all other robust sections we built
         return {"code": 0, "data": {"list": format_tab_sections(items)}}
     except Exception as e:
         logger.error(f"Home error: {e}")
@@ -406,9 +394,7 @@ def get_anime(page: int = 1, session_id: Optional[str] = Cookie(None)):
 @app.get("/rankings")
 def get_rankings(response: Response, tabId: int = 1, session_id: Optional[str] = Cookie(None)):
     s = get_session(session_id)
-    # Ensure session persists even for guest GET requests
     response.set_cookie(key="session_id", value=s["id"], httponly=True, samesite="lax")
-    # The official path from Smali class zm/c is /wefeed-mobile-bff/tab/ranking-list
     variants = ["/wefeed-mobile-bff/tab/ranking-list", "/tab/ranking-list", "/subject-api/ranking-list"]
     
     for v in variants:
@@ -419,7 +405,6 @@ def get_rankings(response: Response, tabId: int = 1, session_id: Optional[str] =
             if not data: continue
             
             formatted = []
-            # RankAllData format: 'subjects' contains the items
             if "subjects" in data and isinstance(data["subjects"], list):
                 items = data["subjects"]
                 if items:
@@ -480,8 +465,6 @@ def get_trending(response: Response, session_id: Optional[str] = Cookie(None)):
     s = get_session(session_id)
     response.set_cookie(key="session_id", value=s["id"], httponly=True, samesite="lax")
     try:
-        # MovieBox has moved the guest home feed between BFF endpoints. Try
-        # known contracts and return the first non-empty catalogue.
         candidates = [
             s["content"].get_trending(),
             s["content"].get_home_list(category_id=1),
@@ -513,7 +496,6 @@ def get_movies(page: int = 1, session_id: Optional[str] = Cookie(None)):
 def format_tab_sections(items: list):
     sections = []
     
-    # Catch-all if it's already a direct movie list (no inner sections)
     is_direct_movies = True
     for row in items:
         if isinstance(row, dict) and (row.get("list") or row.get("items") or row.get("subjects") or row.get("movieList") or row.get("customData") or row.get("banner")):
@@ -631,7 +613,6 @@ def get_western(page: int = 1, session_id: Optional[str] = Cookie(None)):
 def get_nollywood(page: int = 1, session_id: Optional[str] = Cookie(None)):
     s = get_session(session_id)
     try:
-        # Reverting to tab-operating GET vertical for tabId 28
         res = s["content"].get_categories(category_id=28, page=page)
         if not isinstance(res, dict):
              return {"code": 1, "message": "Invalid response format", "data": {"list": []}}
@@ -639,7 +620,6 @@ def get_nollywood(page: int = 1, session_id: Optional[str] = Cookie(None)):
         data = res.get("data") or {}
         items = data.get("list") or data.get("items") or data.get("subjects") or []
         
-        # Log detected items to verify if we are getting Home content
         if items:
             sample = items[0].get('name') or items[0].get('title') or "Unknown"
             logger.info(f"Nollywood Detection: First item is '{sample}'")
@@ -661,13 +641,10 @@ def get_tab_generic(tab_id: int, page: int = 1, session_id: Optional[str] = Cook
         logger.error(f"Generic Tab {tab_id} error: {e}")
         return {"code": 1, "message": str(e), "data": {"list": []}}
 
-
-
 @app.get("/game")
 def get_game(page: int = 1, session_id: Optional[str] = Cookie(None)):
     s = get_session(session_id)
     try:
-        # Reverting to tab-operating GET vertical for tabId 11
         res = s["content"].get_categories(category_id=11, page=page)
         if not isinstance(res, dict):
              return {"code": 1, "message": "Invalid response format", "data": {"list": []}}
@@ -687,11 +664,9 @@ def get_game(page: int = 1, session_id: Optional[str] = Cookie(None)):
 @app.get("/search-suggestions")
 def get_search_suggestions(response: Response, q: Optional[str] = None, session_id: Optional[str] = Cookie(None)):
     s = get_session(session_id)
-    # Ensure session persists even for guest GET requests
     response.set_cookie(key="session_id", value=s["id"], httponly=True, samesite="lax")
     try:
         if q:
-            # If there's a query, use actual search logic for autocomplete suggestions
             res = s["content"].search(q, page=1)
             data = res.get("data", {})
             items = data.get("list") or data.get("items") or data.get("movie") or data.get("subjects") or []
@@ -764,10 +739,8 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
     is_collection = False
     items = []
 
-    # 1. Check if it's a category ID (If standard detail fails or has no title)
     if not data or not (data.get("title") or data.get("name")):
         try:
-           # Try as post detail first
            post_res = s["client"].request("GET", "/wefeed-mobile-bff/post/get", params={"postId": subject_id})
            post_data = post_res.get("data", {})
            if post_data and post_data.get("postId"):
@@ -780,7 +753,6 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
                    elif media.get("url"):
                        video_url = media.get("url")
                        
-               # Synthesize a "Movie" object for the post
                data = {
                    "subjectId": subject_id,
                    "title": "Community Post",
@@ -803,13 +775,11 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
                desc = cat_data.get("desc") or "Curated Collection"
                items = cat_data.get("list") or cat_data.get("items") or cat_data.get("subjects") or []
                
-               # Unbox nested info objects from genre-top response
                raw_items = [i.get("info") if isinstance(i, dict) and i.get("info") else i for i in items]
                mapped_items = [map_item(m) for m in raw_items]
                if mapped_items:
-                   items = mapped_items  # update outer items variable for collectionItems
+                   items = mapped_items
                    is_collection = True
-                   # Synthesize a "Movie" object for the collection
                    data = {
                        "subjectId": subject_id,
                        "title": desc,
@@ -820,11 +790,10 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
 
     if not data: return {"code": 1, "msg": "Not found"}
     
-    # Logic to force status sync: Check the actual list if cloud detail is stale
     is_fav = False
     if not s["auth"].is_guest_mode:
         try:
-            wl_res = s["user"].get_watchlist(page=1, per_page=50) # Check first page of favorites
+            wl_res = s["user"].get_watchlist(page=1, per_page=50)
             wl_items = wl_res.get("data", {}).get("items") or wl_res.get("data", {}).get("list") or []
             for item in wl_items:
                 if str(item.get("subject_id") or item.get("id") or item.get("subjectId")) == str(subject_id):
@@ -833,15 +802,13 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
         except: pass
 
     if is_fav:
-        data["isFavorite"] = 1 # Force it
+        data["isFavorite"] = 1
 
-    # Existing field cross-check
     status_fields = ["isFavorite", "is_favorite", "fav", "is_fav", "collected", "isLike", "wantToSee", "likeStatus"]
     for f in status_fields:
         if f in res and f not in data:
             data[f] = res[f]
 
-    # Fetch Community Post Count
     try:
         post_res = s["client"].request("GET", "/wefeed-mobile-bff/post/count/subject", params={"subjectId": subject_id})
         data["postCount"] = post_res.get("data", {}).get("count") or "0"
@@ -852,7 +819,6 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
     mapped["postCount"] = data.get("postCount", "0")
     mapped["isCollection"] = is_collection
     
-    # Restore synthesized post fields that map_item might have overwritten
     if data.get("isPost"):
         mapped["isPost"] = True
         mapped["streamUrl"] = data.get("streamUrl")
@@ -860,7 +826,6 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
     
     if is_collection and depth == 0:
         mapped["collectionItems"] = [map_item(i, depth=depth+1) for i in items[:24]]
-        # Use first item's poster as collection poster
         if items and not mapped.get("poster"):
             first = map_item(items[0], depth=depth+1)
             mapped["poster"] = first.get("poster")
@@ -869,10 +834,8 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
     raw_cast = data.get("staffList") or data.get("actorList") or []
     mapped["cast"] = [map_actor(a) for a in raw_cast]
     
-    # Fetch Available Languages / Dubs (Consolidated)
     all_languages = []
     
-    # 1. Check for Dubs list (Versions linked via different Subject IDs)
     raw_dubs = data.get("dubs") or []
     for dub in raw_dubs:
         all_languages.append({
@@ -882,12 +845,10 @@ def get_detail(subject_id: str, depth: int = 0, session_id: Optional[str] = Cook
             "type": "dub"
         })
         
-    # 2. Check for Resource Detectors (Tracks within the same/similar ID)
     try:
         det_res = s["client"].request('GET', '/wefeed-mobile-bff/subject-api/get', params={'subjectId': subject_id})
         detectors = (det_res.get('data') or {}).get('resourceDetectors') or []
         for d in detectors:
-            # Avoid duplicates if we already have it link-wise
             d_name = d.get("name") or "Resource"
             all_languages.append({
                 "id": d.get("resourceId"),
@@ -907,10 +868,8 @@ def get_episodes(series_id: str, session_id: Optional[str] = Cookie(None)):
     res = s["content"].get_episode_list(series_id)
     logger.info(f"EPISODES CLOUD RAW: {json.dumps(res)[:2000]}")
     data = res.get("data") or {}
-    # Handle data wrapper vs top-level
     raw_seasons = data.get("seasons") or res.get("seasons") or []
     if not raw_seasons:
-        # Check deep nested fields if first layer failed
         raw_seasons = data.get("seasonList") or data.get("list") or []
         
     mapped_seasons = []
@@ -918,7 +877,6 @@ def get_episodes(series_id: str, session_id: Optional[str] = Cookie(None)):
         num = s_raw.get("se") or s_raw.get("seasonNumber") or 1
         eps = []
         
-        # Check all possible list/string fields for episodes
         for key in ["allEp", "epList", "episodeList", "episodes", "list", "items"]:
             pool = s_raw.get(key)
             if not pool: continue
@@ -934,9 +892,8 @@ def get_episodes(series_id: str, session_id: Optional[str] = Cookie(None)):
                     else:
                         eps.append({"episodeNumber": str(item), "title": f"Episode {item}", "id": f"{series_id}_{num}_{item}"})
             
-            if eps: break # Stop once we found a pool
+            if eps: break
 
-        # FALLBACK: If no explicit pool found, but maxEp is set, generate sequence [1..maxEp]
         if not eps:
             max_ep = s_raw.get("maxEp") or s_raw.get("max_ep") or 0
             if isinstance(max_ep, str) and max_ep.isdigit(): max_ep = int(max_ep)
@@ -957,21 +914,39 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
         return cached["data"]
 
     s = get_session(session_id)
-    # 0. Detect subject type once and reuse subject_detail later for runtime
-    subject_detail = {}
-    try:
-        subject_detail = s["content"].get_movie_detail(subject_id).get("data") or {}
-        is_movie = (str(subject_detail.get("subjectType") or subject_detail.get("type")) == "1")
-    except:
-        is_movie = False
 
+    # 1. Fetch movie detail and primary play-info/v2 concurrently to save ~2s on first click
+    initial_se = None if season == 0 else season
+    initial_ep = None if episode == 0 else episode
+
+    def fetch_detail():
+        try:
+            return s["content"].get_movie_detail(subject_id).get("data") or {}
+        except:
+            return {}
+
+    def fetch_play_v2():
+        try:
+            return s["stream"].get_play_info_v2(subject_id, season=initial_se, episode=initial_ep)
+        except:
+            return {}
+
+    with ThreadPoolExecutor(max_workers=2) as init_pool:
+        fut_detail = init_pool.submit(fetch_detail)
+        fut_play_v2 = init_pool.submit(fetch_play_v2)
+        subject_detail = fut_detail.result()
+        res = fut_play_v2.result()
+
+    is_movie = (str(subject_detail.get("subjectType") or subject_detail.get("type")) == "1")
     logger.info(f"RESOLVING STREAM: ID={subject_id} Type={'Movie' if is_movie else 'Series'} Resource={resource_id}")
-    
-    # If it's a movie, se and ep MUST be None for the official play-info API to respond correctly in some regions
+
     res_se = None if is_movie else season
     res_ep = None if is_movie else episode
 
-    # Helper: Detect fake/dummy upgrade notice clips (anti-piracy trap)
+    # If subject turned out to be a movie while season/episode were non-zero, re-query with None
+    if (res_se, res_ep) != (initial_se, initial_ep):
+        res = s["stream"].get_play_info_v2(subject_id, season=res_se, episode=res_ep)
+
     def is_deprecation_notice_url(u: str) -> bool:
         if not u: return False
         lower = u.lower()
@@ -984,8 +959,6 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
             or "b164fbfb4347792950bdfbfb563d39d9" in lower
         )
 
-    # 1. Primary: Try play-info/v2, then fallback to play-info
-    res = s["stream"].get_play_info_v2(subject_id, season=res_se, episode=res_ep)
     data = res.get("data", {}) if isinstance(res, dict) else {}
     streams = data.get("streams") or data.get("streamList") or []
     
@@ -997,7 +970,7 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
     
     logger.info(f"PLAY-INFO RESPONSE: code={res.get('code')}, found {len(streams)} streams")
 
-    # 2. Episode Resource Mirrors via /resource/v2 with isVip=true spoofing (only when primary streams are missing or dummy)
+    # 2. Episode Resource Mirrors via /resource/v2 (only when primary streams are missing or dummy)
     valid_primary = [st for st in streams if st.get("url") and not is_deprecation_notice_url(st.get("url", ""))]
     if not valid_primary:
         try:
@@ -1049,15 +1022,12 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
         elif not is_deprecation_notice_url(st_url):
             recovered_streams.append(_st)
 
-    # Filter out any deprecation trap clips from candidate streams
     streams = [st for st in (recovered_streams if recovered_streams else streams) if not is_deprecation_notice_url(st.get("url", ""))]
 
     # Fallback to resourceDetectors inside movie/show detail if no streams found
     if not streams:
         logger.info(f"No streams yet. Checking resourceDetectors for subject {subject_id}...")
         try:
-            if not subject_detail:
-                subject_detail = s["content"].get_movie_detail(subject_id).get("data") or {}
             detectors = subject_detail.get("resourceDetectors") or []
             for det in detectors:
                 if resource_id and str(det.get("resourceId")) != str(resource_id):
@@ -1086,7 +1056,6 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
         except Exception as e:
             logger.error(f"Error extracting from resourceDetectors: {e}")
 
-    # signCookie can be in root, in data, or in the session cookies
     global_cookie = res.get("signCookie") or data.get("signCookie") or s["client"].session.cookies.get("signCookie") or s["auth"].token
     logger.info(f"Phase 1 - Primary Result: {len(streams)} streams found (code: {res.get('code')}) (Cookie: {'YES' if global_cookie else 'NO'})")
 
@@ -1102,8 +1071,26 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
         return 5
 
     prioritized_streams = sorted(streams, key=prioritize_h264)
+    subtitles_source = data.get("subTitleList", [])
 
-    # Parallel HEAD checks across candidate streams
+    # Start external captions lookup concurrently with HEAD stream checks (only if primary subtitles are missing)
+    def fetch_ext_captions(sub_res_id: str):
+        try:
+            ext_hdrs = {
+                "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)",
+                "X-M-Version": "11.7.0"
+            }
+            ext_res = s["client"].request(
+                'GET',
+                '/wefeed-mobile-bff/subject-api/get-ext-captions',
+                params={'resourceId': sub_res_id, 'subjectId': subject_id, 'episode': episode},
+                headers=ext_hdrs
+            )
+            return ext_res.get("data", {}).get("extCaptions") or ext_res.get("data", {}).get("list") or []
+        except Exception as se:
+            logger.warning(f"External subtitle probe failed: {se}")
+            return []
+
     def check_candidate(st):
         url = st.get("url")
         if not url or is_deprecation_notice_url(url):
@@ -1115,18 +1102,29 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
         except:
             return False
 
+    initial_sub_res_id = ""
+    if prioritized_streams:
+        initial_sub_res_id = str(prioritized_streams[0].get("id") or "")
+    if not initial_sub_res_id or initial_sub_res_id == "None":
+        detectors = subject_detail.get("resourceDetectors") or []
+        initial_sub_res_id = str(detectors[0].get("resourceId") or subject_id) if detectors else subject_id
+
+    ext_captions_future = None
+    ext_captions_pool = None
+    if not subtitles_source:
+        ext_captions_pool = ThreadPoolExecutor(max_workers=1)
+        ext_captions_future = ext_captions_pool.submit(fetch_ext_captions, initial_sub_res_id)
+
     if prioritized_streams:
         with ThreadPoolExecutor(max_workers=min(6, len(prioritized_streams))) as pool:
             results_ok = list(pool.map(check_candidate, prioritized_streams))
 
-        # Pass 1: Prefer playable non-HEVC stream
         for st, ok in zip(prioritized_streams, results_ok):
             if ok and not any(bad in st.get("url", "").lower() for bad in ["h265", "x265", "hev1"]):
                 working_stream = st
                 working_cookie = st.get("signCookie") or global_cookie or ""
                 break
 
-        # Pass 2: Fallback to playable HEVC stream if no non-HEVC stream is available
         if not working_stream:
             for st, ok in zip(prioritized_streams, results_ok):
                 if ok:
@@ -1134,8 +1132,6 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
                     working_stream = st
                     working_cookie = st.get("signCookie") or global_cookie or ""
                     break
-
-    subtitles_source = data.get("subTitleList", [])
 
     # PRIORITY: Resource Mirrors (UGC/Dubs)
     if not working_stream:
@@ -1145,35 +1141,25 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
                 "User-Agent": "MovieBox/4.0.02 (Android 14; Pixel 6)",
                 "X-M-Version": "4.0.02"
             }
-            
-            # PHASE 1: Resource Discovery via Metadata
             r_ids = []
             try:
                 det_res = s["client"].request('GET', '/wefeed-mobile-bff/subject-api/get', params={'subjectId': subject_id}, headers=hdrs)
-                logger.info(f"Metadata Probe Result: {det_res.get('code')} - {len(det_res.get('data', {}).get('resourceDetectors', []))} detectors found")
                 detectors = (det_res.get('data') or {}).get('resourceDetectors') or []
                 for d in detectors:
                     if d.get('resourceId'): r_ids.append(d.get('resourceId'))
-            except Exception as ex: 
+            except Exception as ex:
                 logger.error(f"Metadata Probe Crash: {ex}")
 
-            # PHASE 2: Fallback to See-List (UGC Discoverability)
             if not r_ids:
                 try:
                     res_list = s["client"].request('GET', '/wefeed-mobile-bff/subject-api/see-list-v2', params={'subjectId': subject_id, 'page': 1, 'pageSize': 20, 'seeType': 1}, headers=hdrs)
-                    logger.info(f"See-List Probe Result: {res_list.get('code')}")
                     r_items = (res_list.get('data') or {}).get('items') or []
                     for item in r_items:
                         if item.get('id'): r_ids.append(item.get('id'))
                 except: pass
 
-            # PHASE 3: Iterative Recovery
             for r_id in r_ids:
-                logger.info(f"Probing Resource: {r_id} for {subject_id}")
-                p_params = {
-                    'subjectId': subject_id, 
-                    'resourceId': r_id
-                }
+                p_params = {'subjectId': subject_id, 'resourceId': r_id}
                 if not is_movie:
                     p_params.update({'se': season, 'ep': episode, 'season': season, 'episode': episode})
                 
@@ -1184,19 +1170,15 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
                 p_streams = p_data.get('streamList') or p_data.get('streams') or []
                 
                 if not p_streams:
-                    logger.info(f"Retrying probe {r_id} without quality constraint...")
                     p_info = s["client"].request('GET', '/wefeed-mobile-bff/subject-api/play-info', params=p_params, headers=hdrs)
                     p_data = p_info.get('data') or {}
                     p_streams = p_data.get('streamList') or p_data.get('streams') or []
 
-                logger.info(f"Probe {r_id} Result: {len(p_streams)} streams recovered")
                 p_streams = [ps for ps in p_streams if not is_deprecation_notice_url(ps.get("url", ""))]
                 if p_streams:
                     working_stream = p_streams[0]
-                    
                     if "hakunaymatata" in working_stream.get("url", ""):
                         try:
-                            logger.info(f"Ping session for CDN handshake: {working_stream.get('url')[:60]}")
                             requests.head(working_stream.get("url"), headers={"User-Agent": "ExoPlayerLib/2.19.1"}, timeout=2.5, cookies=s["client"].session.cookies)
                         except: pass
 
@@ -1207,13 +1189,7 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
                         s["client"].session.cookies.get("signCookie") or 
                         global_cookie or ""
                     )
-                    
-                    if not working_cookie and "hakunaymatata" in working_stream.get("url", ""):
-                        logger.warning("PROTECTED CDN DETECTED WITH NO COOKIE AFTER PING! Attempting session flush...")
-                        working_cookie = s["client"].session.cookies.get("signCookie") or ""
-
                     subtitles_source = p_data.get("subTitleList", []) or subtitles_source
-                    logger.info(f"RESOURCE MIRROR SUCCESS: Recovered stream via User-Resource {r_id} (Cookie: {'YES' if working_cookie else 'NO'})")
                     break
         except Exception as e:
             logger.warning(f"Resource Mirror Lookup Failed: {e}")
@@ -1222,7 +1198,6 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
     h265_candidate = next((st for st in streams if not is_deprecation_notice_url(st.get("url", "")) and any(bad in st.get("url", "").lower() for bad in ["h265", "x265", "hev1", "h.265"])), None)
     
     if is_hevc and h265_candidate and not working_stream:
-        logger.info("Detected HEVC/H.265. Directly serving RAW stream for Native Player support...")
         working_stream = h265_candidate
         working_cookie = working_stream.get("signCookie") or global_cookie or ""
 
@@ -1235,8 +1210,6 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
 
     # SECONDARY FALLBACK: API Cluster Rotation (only if no streams found yet)
     if not working_stream and not streams:
-        logger.info(f"Entering Phase 4 Cluster Rotation for {subject_id}")
-        
         clusters = [
             ("https://apig.inmoviebox.com", "/wefeed-mobile-bff/subject-api/play-info"),
             ("https://api5.aoneroom.com", "/wefeed-mobile-bff/subject-api/play-info"),
@@ -1245,41 +1218,25 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
             ("https://h5-api.aoneroom.com", "/wefeed-h5api-bff/subject/detail-rec"),
             ("https://h5.aoneroom.com", "/index/video/v_detail")
         ]
-        
         hdrs = {
             "User-Agent": "MovieBox/4.0.02 (Android 14; Pixel 6)",
             "X-M-Version": "4.0.02"
         }
-        
         orig_base = s["client"].BASE_URL
         for cluster_url, endpoint in clusters:
             try:
-                logger.info(f"ROTATING CLUSTER: {cluster_url} -> {endpoint}")
                 s["client"].BASE_URL = cluster_url
-                
                 pms = {'subjectId': subject_id, 'se': season, 'ep': episode, 'quality': official_quality}
                 if "detail-rec" in endpoint:
                     pms["perPage"] = 12
                     pms["page"] = 1
-                
                 method = 'POST' if "v_detail" in endpoint else 'GET'
-                
                 fb_res = s["client"].request(method, endpoint, params=pms if method=='GET' else None, data=pms if method=='POST' else None, headers=hdrs)
                 if not isinstance(fb_res, dict):
-                    logger.warning(f"Cluster {cluster_url} returned invalid response type: {type(fb_res)}")
                     continue
                 fb_data = fb_res.get('data', {})
                 srcs = fb_data.get('streamList') or fb_data.get('streams') or []
-                
-                if not srcs and "detail-rec" in endpoint:
-                    items = fb_data.get('items') or []
-                    if items:
-                         logger.info(f"H5 Detail contains {len(items)} sibling items, probing first...")
-                
-                logger.info(f"Cluster {cluster_url} Result: {len(srcs)} streams found")
-                
                 if not srcs and fb_data.get('url'): srcs = [fb_data]
-                
                 for cand in srcs:
                     url = cand.get('url')
                     if not url or is_deprecation_notice_url(url): continue
@@ -1290,7 +1247,6 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
                             working_stream = cand
                             working_cookie = cookie
                             subtitles_source = fb_data.get("subTitleList", []) or subtitles_source
-                            logger.info(f"CLUSTER SUCCESS: Recovered stream via {cluster_url} Cluster")
                             break
                     except: continue
                 if working_stream: break
@@ -1298,24 +1254,17 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
                 logger.warning(f"Cluster {cluster_url} failed: {e}")
             finally:
                 s["client"].BASE_URL = orig_base
-    
-    if not working_stream and streams:
-        for cand in streams:
-            if not is_deprecation_notice_url(cand.get("url", "")):
-                working_stream = cand
-                working_cookie = cand.get("signCookie") or global_cookie or ""
-                break
 
     if working_stream and is_deprecation_notice_url(working_stream.get("url", "")):
         working_stream = None
 
     if not working_stream:
-        # Failover to alternate dubs (e.g. Original Audio) if regional dub has no direct streams
+        if ext_captions_pool:
+            ext_captions_pool.shutdown(wait=False)
         dubs = subject_detail.get("dubs", []) if subject_detail else []
         for dub in dubs:
             dub_sid = str(dub.get("subjectId") or "")
             if dub_sid and dub_sid != str(subject_id):
-                logger.info(f"Checking alternate dub {dub.get('lanName')} (id: {dub_sid}) for {subject_id}...")
                 try:
                     actual_sid = session_id if isinstance(session_id, str) else None
                     alt_info = get_stream(dub_sid, season=season, episode=episode, quality=quality, session_id=actual_sid)
@@ -1323,26 +1272,20 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
                         return alt_info
                 except Exception:
                     continue
-
-        logger.error(f"RESOLUTION FAILURE: No usable streams found for subject {subject_id}")
         raise HTTPException(status_code=404, detail="No streams found.")
 
-    # Reuse already-fetched subject_detail instead of calling get_movie_detail a second time
+    # Reuse already-fetched subject_detail for duration
     total_duration = 0
     source_method = "metadata"
     runtime_str = "0"
     try:
-        if not subject_detail:
-            subject_detail = s["content"].get_movie_detail(subject_id).get("data") or {}
         runtime_str = subject_detail.get("runtime") or subject_detail.get("duration") or subject_detail.get("totalDuration") or "0"
-        
         for sl in subject_detail.get("seasonList", []):
             if str(sl.get("season")) == str(season):
                 for ep_item in sl.get("episodeList", []):
                     if str(ep_item.get("episode")) == str(episode):
                         runtime_str = ep_item.get("runtime") or ep_item.get("duration") or ep_item.get("totalDuration") or runtime_str
                         break
-        
         runtime_str = str(runtime_str)
         if ":" in runtime_str:
             parts = [int(p) for p in runtime_str.split(':')]
@@ -1353,49 +1296,43 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
             total_duration = int(digits) * 60 if digits else 0
     except Exception as e:
         logger.error(f"Metadata duration extraction failed: {e}")
-    
-    # ADVANCED PROBE: Native HLS Parsing (Fast & Accurate for .m3u8)
+
     if (total_duration < 600 or total_duration > 15000) and working_stream.get("url", "").lower().endswith(".m3u8"):
         try:
-           target_v = working_stream.get("url")
-           logger.info(f"Metadata suspicious. Engaging HLS Parse for {target_v[:60]}...")
-           h_res = httpx.get(target_v, headers={"User-Agent": "ExoPlayerLib/2.18.7", "Cookie": working_cookie}, verify=False, timeout=4)
-           if h_res.status_code == 200:
-              lines = h_res.text.splitlines()
-              h_dur = sum(float(line.split(":")[1].split(",")[0]) for line in lines if line.startswith("#EXTINF:"))
-              if h_dur > 0:
-                 total_duration = int(h_dur)
-                 source_method = "hls-parse"
+            target_v = working_stream.get("url")
+            h_res = httpx.get(target_v, headers={"User-Agent": "ExoPlayerLib/2.18.7", "Cookie": working_cookie}, verify=False, timeout=4)
+            if h_res.status_code == 200:
+                lines = h_res.text.splitlines()
+                h_dur = sum(float(line.split(":")[1].split(",")[0]) for line in lines if line.startswith("#EXTINF:"))
+                if h_dur > 0:
+                    total_duration = int(h_dur)
+                    source_method = "hls-parse"
         except Exception as he:
-           logger.warning(f"HLS duration parse failed: {he}")
+            logger.warning(f"HLS duration parse failed: {he}")
 
-    # ADVANCED PROBE: ffprobe for absolute accuracy for MP4/Others
     if source_method == "metadata" and (total_duration < 600 or total_duration > 15000):
         try:
-           target_v = working_stream.get("url")
-           if target_v:
-              logger.info(f"Metadata suspicious ({total_duration}s). Engaging FFPROBE for {target_v[:60]}...")
-              ff_cmd = [
-                  'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-                  '-of', 'default=noprint_wrappers=1:nokey=1',
-                  '-headers', f'Cookie: {working_cookie}\r\nUser-Agent: ExoPlayerLib/2.18.7\r\n',
-                  target_v
-              ]
-              ff_proc = subprocess.run(ff_cmd, capture_output=True, text=True, timeout=4)
-              if ff_proc.returncode == 0 and ff_proc.stdout.strip():
-                  f_dur = float(ff_proc.stdout.strip())
-                  if f_dur > 0:
-                      total_duration = int(f_dur)
-                      source_method = "ffprobe"
+            target_v = working_stream.get("url")
+            if target_v:
+                ff_cmd = [
+                    'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1',
+                    '-headers', f'Cookie: {working_cookie}\r\nUser-Agent: ExoPlayerLib/2.18.7\r\n',
+                    target_v
+                ]
+                ff_proc = subprocess.run(ff_cmd, capture_output=True, text=True, timeout=4)
+                if ff_proc.returncode == 0 and ff_proc.stdout.strip():
+                    f_dur = float(ff_proc.stdout.strip())
+                    if f_dur > 0:
+                        total_duration = int(f_dur)
+                        source_method = "ffprobe"
         except Exception as fe:
-           logger.warning(f"FFPROBE duration probe failed: {fe}")
+            logger.warning(f"FFPROBE duration probe failed: {fe}")
 
-    if total_duration < 60: # Final fallback
-        total_duration = 3600 # 1 hour default
+    if total_duration < 60:
+        total_duration = 3600
 
-    logger.info(f"DURATION LOCK [{source_method}]: {subject_id} S{season}E{episode} -> {total_duration}s (Source: {runtime_str})")
-
-    # SUBTITLE DISCOVERY: Combine stream-internal and external BFF captions
+    # SUBTITLE DISCOVERY: Use stream subtitles if present; otherwise collect parallel external captions
     all_subtitles = []
     seen_sub_urls = set()
 
@@ -1408,7 +1345,6 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
             sz = int(sub.get("size") or 0)
             if 0 < sz <= 50: return
         except: pass
-
         if url not in seen_sub_urls:
             seen_sub_urls.add(url)
             lan_name = sub.get("lanName") or sub.get("lan") or "Unknown"
@@ -1418,25 +1354,12 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
     for st_sub in subtitles_source:
         add_subtitle_track(st_sub)
 
-    try:
-        ext_hdrs = {"User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; SM-S918B Build/TP1A.220624.014)", "X-M-Version": "11.7.0"}
-        sub_resource_id = str(working_stream.get("id") or "")
-        
-        if not sub_resource_id or sub_resource_id == "None":
-            detectors = subject_detail.get("resourceDetectors") or []
-            if detectors:
-                sub_resource_id = str(detectors[0].get("resourceId") or subject_id)
-            else:
-                sub_resource_id = subject_id
-        
-        ext_res = s["client"].request('GET', '/wefeed-mobile-bff/subject-api/get-ext-captions', 
-                                      params={'resourceId': sub_resource_id, 'subjectId': subject_id, 'episode': episode}, 
-                                      headers=ext_hdrs)
-        ext_list = ext_res.get("data", {}).get("extCaptions") or ext_res.get("data", {}).get("list") or []
+    if ext_captions_future is not None:
+        ext_list = ext_captions_future.result()
+        if ext_captions_pool:
+            ext_captions_pool.shutdown(wait=False)
         for esub in ext_list:
             add_subtitle_track(esub)
-    except Exception as se:
-        logger.warning(f"External subtitle probe failed: {se}")
 
     best_sub = next((sub.get("url") for sub in all_subtitles if sub.get("lan") == "en" or "english" in (sub.get("lanName") or "").lower()), None)
     if not best_sub and all_subtitles:
@@ -1490,14 +1413,12 @@ async def proxy_download(
 ):
     s = get_session(session_id)
     
-    # PRIORITY 1: Carrier 301 (Legacy Mirror) specifically for raw MP4s
     logger.info(f"Targeting Carrier 301 Raw Mirrors for {subject_id}...")
     c_res = s["client"].request('POST', '/index/video/v_detail', data={'subjectId': subject_id, 'carrier': '301', 'quality': quality})
     data = c_res.get("data")
     if not isinstance(data, dict): data = {}
     streams = data.get("streamList") or data.get("streams") or []
     
-    # PRIORITY 2: Mobile Protocol (DASH/HLS) if MP4 is missing
     if not streams:
         res = s["stream"].get_play_info(subject_id, season=season, episode=episode)
         data = res.get("data", {})
@@ -1519,7 +1440,6 @@ async def proxy_download(
     
     clean_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
     
-    # CASE 1: Native MP4 stream (Fully seekable via HTTPX byte ranges)
     if ".mp4" in url.lower():
         req_hdrs = {"User-Agent": "ExoPlayerLib/2.18.7", "Cookie": cookie}
         range_header = request.headers.get("Range")
@@ -1548,7 +1468,6 @@ async def proxy_download(
             background=httpx.AsyncClient().aclose
         )
         
-    # CASE 2: DASH (.mpd) or HLS (.m3u8) needs FFMPEG demuxing
     filename = f"{clean_title}_S{season}_E{episode}.ts"
     
     def iter_ffmpeg():
@@ -2099,6 +2018,5 @@ def launch_player(
             raise HTTPException(status_code=500, detail=f"Could not launch {player}: {str(e2)}")
 
 if __name__ == "__main__":
-    # DISABLE RELOAD: Prevents Windows-specific crash loops during active streaming/editing
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run("moviebox_api_server:app", host="0.0.0.0", port=port, reload=False)
