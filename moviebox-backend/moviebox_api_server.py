@@ -695,12 +695,46 @@ def search(response: Response, q: str, page: int = 1, subject_type: int = 0, typ
     s = get_session(session_id)
     response.set_cookie(key="session_id", value=s["id"], httponly=True, samesite="lax")
     try:
-        if not q.strip():
+        query = q.strip()
+        if not query:
             return {"code": 0, "data": {"items": []}}
         effective_type = type if type is not None else subject_type
-        res = s["content"].search(q.strip(), page=page, subject_type=effective_type)
-        logger.info(f"SEARCH RAW ({q}): {json.dumps(res, default=str)[:2000]}")
+        res = s["content"].search(query, page=page, subject_type=effective_type)
+        logger.info(f"SEARCH RAW ({query}): {json.dumps(res, default=str)[:2000]}")
         items = _extract_items(res)
+
+        if not items:
+            hdrs = {
+                "User-Agent": "MovieBox/4.0.02 (Android 14; Pixel 6)",
+                "X-M-Version": "4.0.02"
+            }
+            fallback_targets = [
+                ("https://api5.aoneroom.com", "/wefeed-mobile-bff/subject-api/search/v2", "POST", {"keyword": query, "page": page, "perPage": 24, "subjectType": effective_type}),
+                ("https://api-sin.aoneroom.com", "/wefeed-mobile-bff/subject-api/search/v2", "POST", {"keyword": query, "page": page, "perPage": 24, "subjectType": effective_type}),
+                ("https://h5-api.aoneroom.com", "/wefeed-h5api-bff/subject/search", "POST", {"keyword": query, "page": page, "perPage": 24, "subjectType": effective_type}),
+                ("https://apig.inmoviebox.com", "/wefeed-mobile-bff/subject-api/search-suggest", "GET", {"keyword": query}),
+            ]
+            orig_base = s["client"].BASE_URL
+            for cluster_url, endpoint, method, payload in fallback_targets:
+                try:
+                    s["client"].BASE_URL = cluster_url
+                    fb_res = s["client"].request(
+                        method,
+                        endpoint,
+                        params=payload if method == "GET" else None,
+                        json=payload if method == "POST" else None,
+                        headers=hdrs
+                    )
+                    fb_items = _extract_items(fb_res)
+                    if fb_items:
+                        logger.info(f"SEARCH FALLBACK HIT ({cluster_url}{endpoint}) for '{query}': {len(fb_items)} items")
+                        items = fb_items
+                        break
+                except Exception as fb_err:
+                    logger.warning(f"Search fallback {cluster_url} failed: {fb_err}")
+                finally:
+                    s["client"].BASE_URL = orig_base
+
         return {"code": 0, "data": {"items": [map_item(i) for i in items[:40] if isinstance(i, dict)]}}
     except Exception as e:
         logger.exception("Search upstream error for %s", q)
