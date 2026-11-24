@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: moviebox-api
+    runtime: docker
+    dockerfilePath: ./moviebox-backend/Dockerfile
+    dockerContext: ./moviebox-backend
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 7860
