@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
   <title>BDIX Media Finder</title>
   <style>
     * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
@@ -67,30 +68,32 @@
   </style>
 </head>
 <body>
+
   <h1>🎬 BDIX <span>Media Finder</span></h1>
   <div class="sub">Search PlusNet &amp; CTGFun BDIX servers + MovieBox global streams</div>
 
   <div class="search-wrap">
     <input type="text" id="q" placeholder="Loading BDIX indexes..." disabled />
-    <div class="toolbar">
-      <div class="filters">
-        <label class="file-btn">📂 Load .txt <input type="file" id="fileInput" accept=".txt" multiple hidden /></label>
-        <button class="srv-pill active" data-srv="all">All Servers</button>
-        <button class="srv-pill" data-srv="plusnet">PlusNet</button>
-        <button class="srv-pill" data-srv="ctgfun">CTGFun</button>
-        <button class="btn-pill active" data-type="all">All</button>
-        <button class="btn-pill" data-type="movie">Movies</button>
-        <button class="btn-pill" data-type="series">Series</button>
-        <select id="qualFilter">
-          <option value="all">All Qualities</option>
-          <option value="2160p">2160p 4K</option>
-          <option value="1080p">1080p</option>
-          <option value="720p">720p</option>
-        </select>
-        <button class="btn-global" id="globalSearchBtn">🌐 Search MovieBox</button>
-      </div>
-      <div id="stats">Loading indexes...</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="filters">
+      <label class="file-btn">📂 Load .txt <input type="file" id="fileInput" accept=".txt" multiple hidden /></label>
+      <button class="srv-pill active" data-srv="all">All Servers</button>
+      <button class="srv-pill" data-srv="plusnet">PlusNet</button>
+      <button class="srv-pill" data-srv="ctgfun">CTGFun</button>
+      <button class="btn-pill active" data-type="all">All</button>
+      <button class="btn-pill" data-type="movie">Movies</button>
+      <button class="btn-pill" data-type="series">Series</button>
+      <select id="qualFilter">
+        <option value="all">All Qualities</option>
+        <option value="2160p">2160p 4K</option>
+        <option value="1080p">1080p</option>
+        <option value="720p">720p</option>
+      </select>
+      <button class="btn-global" id="globalSearchBtn">🌐 Search MovieBox</button>
     </div>
+    <div id="stats">Loading indexes...</div>
   </div>
 
   <div class="results" id="results"></div>
@@ -101,10 +104,13 @@
         <div class="modal-title" id="modalTitle">Now Playing</div>
         <button class="close-btn" onclick="closePlayer()">✕ Close</button>
       </div>
-      <video id="videoPlayer" controls playsinline></video>
+      <video id="videoPlayer" controls playsinline referrerpolicy="no-referrer"></video>
       <div class="modal-hint">
-        <span>If audio or video fails to decode in browser, copy the link into VLC or MPC-HC.</span>
-        <button class="act-copy" id="modalCopyBtn">📋 Copy Stream Link</button>
+        <span>If embedded playback is blocked, open directly in a new tab or copy into VLC / MPC-HC.</span>
+        <div class="actions">
+          <a class="act-open" id="modalTabBtn" href="#" target="_blank" rel="noreferrer">Open in Tab ↗</a>
+          <button class="act-copy" id="modalCopyBtn">📋 Copy Stream Link</button>
+        </div>
       </div>
     </div>
   </div>
@@ -112,6 +118,8 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    const MOVIEBOX_API_BASE = "https://moviebox-api-ux5q.onrender.com"; // Replace with your deployed Hugging Face Space / Render URL when hosted online
+
     const SERVERS = [
       { id: "plusnet", name: "PlusNet", badgeClass: "b-plusnet", url: "https://fs.plus.net.bd", file: "plusnet.txt" },
       { id: "ctgfun",  name: "CTGFun",  badgeClass: "b-ctgfun",  url: "https://movie.ctgfun.com", file: "ctgfun.txt" }
@@ -162,28 +170,31 @@
         showToast("📋 Link copied! Opening VLC...");
         window.location.href = `vlc://${url}`;
       } else {
-        showToast("📋 Link copied! Open VLC or MPC-HC and press Ctrl+O (or Ctrl+V) to stream.");
+        showToast("📋 Embedded stream blocked — opened in new tab & copied link for VLC/MPC-HC.");
+        window.open(url, "_blank", "noreferrer");
       }
     }
 
-    async function handlePlay(url, filename) {
-      const isBrowserPlayable = BROWSER_PLAY_REGEX.test(filename) || BROWSER_PLAY_REGEX.test(url);
+    async function handlePlay(url, filename, rawUrl = "") {
+      const targetUrl = rawUrl || url;
+      const isBrowserPlayable = BROWSER_PLAY_REGEX.test(filename) || BROWSER_PLAY_REGEX.test(url) || url.includes("/proxy-media");
       if (!isBrowserPlayable) {
-        await openExternalOrCopy(url);
+        await openExternalOrCopy(targetUrl);
         return;
       }
 
       const modal = document.getElementById("playerModal");
       const video = document.getElementById("videoPlayer");
       document.getElementById("modalTitle").textContent = filename;
+      document.getElementById("modalTabBtn").href = url;
       document.getElementById("modalCopyBtn").onclick = async () => {
-        await copyText(url);
-        showToast("📋 Stream link copied!");
+        await copyText(targetUrl);
+        showToast("📋 Direct stream link copied!");
       };
 
       video.onerror = async () => {
         closePlayer();
-        await openExternalOrCopy(url);
+        await openExternalOrCopy(targetUrl);
       };
 
       video.src = url;
@@ -194,6 +205,7 @@
     function closePlayer() {
       const modal = document.getElementById("playerModal");
       const video = document.getElementById("videoPlayer");
+      video.onerror = null;
       video.pause();
       video.removeAttribute("src");
       video.load();
@@ -203,7 +215,7 @@
     document.getElementById("results").addEventListener("click", async (e) => {
       const playBtn = e.target.closest(".js-play");
       if (playBtn) {
-        await handlePlay(playBtn.dataset.url, playBtn.dataset.name);
+        await handlePlay(playBtn.dataset.url, playBtn.dataset.name, playBtn.dataset.raw || playBtn.dataset.url);
         return;
       }
       const copyBtn = e.target.closest(".js-copy");
@@ -231,9 +243,9 @@
     function cleanTitleString(str) {
       return str
         .replace(/\.(mp4|mkv|avi|mov|webm|m4v|ts|flv|wmv)$/i, "")
-        .replace(/\./g, " ")
-        .replace(/[._-]/g, " ")
+        .replace(/\[[^\]]*\]/g, " ")
         .replace(/\b(1080p|720p|2160p|4k|480p|webrip|webdl|bluray|brrip|hdrip|x264|x265|hevc|10bit|aac|dd51|myflix|ebox|mal|dts|hindi|tamil|telugu|dual|audio|esub|org|ddn|proper|hdts|camrip)\b/gi, "")
+        .replace(/[._-]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
     }
@@ -248,19 +260,23 @@
 
         if (path.endsWith("/") || !VIDEO_EXT_REGEX.test(path)) continue;
 
-        const parts = path.split("/");
-        const name = parts[parts.length - 1];
-        const parentName = parts.length > 1 ? parts[parts.length - 2] : name;
-        const folderPath = parts.length > 1 ? parts.slice(0, -1).join("/") + "/" : "";
+        const cleanParts = path.split("/").filter(Boolean);
+        if (!cleanParts.length) continue;
+        const name = cleanParts[cleanParts.length - 1];
+        const parentName = cleanParts.length > 1 ? cleanParts[cleanParts.length - 2] : name;
+        const folderParts = cleanParts.slice(0, -1);
 
-        const isSeries = /tv|series|season|s\d+|s\d{2}e\d{2}/i.test(path);
+        const isSeries = /(tv[\s-_]series|series|season|s\d+|s\d{2}e\d{2})/i.test(path);
         const qMatch = path.match(/(2160p|4k|1080p|720p|480p)/i);
         const extMatch = name.match(/\.([a-z0-9]{2,4})$/i);
         const tmdbMatch = path.match(/\[tmdb-(\d+)\]/i);
-        const yearMatch = path.match(/[(.s_]((?:19|20)\d{2})[).s_]/);
+        const yearMatch = path.match(/[(.\s_]((?:19|20)\d{2})[).\s_]/);
 
-        const fileUrl = srv.url + parts.map(encodeURIComponent).join("/");
-        const folderUrl = srv.url + (folderPath ? folderPath.split("/").map(encodeURIComponent).join("/") : "");
+        const srvBase = srv.url.replace(/\/+$/, "");
+        const fileUrl = `${srvBase}/${cleanParts.map(encodeURIComponent).join("/")}`;
+        const folderUrl = folderParts.length
+          ? `${srvBase}/${folderParts.map(encodeURIComponent).join("/")}/`
+          : `${srvBase}/`;
 
         entries.push({
           serverId: srv.id,
@@ -358,16 +374,28 @@
       btn.disabled = true;
       btn.textContent = "⏳ Searching MovieBox...";
       try {
-        const res = await fetch(`/.netlify/functions/moviebox?action=search&q=${encodeURIComponent(query)}`);
-        const data = await res.json();
-        const items = data.items || [];
+        const res = await fetch(`${MOVIEBOX_API_BASE}/search?q=${encodeURIComponent(query)}&page=1`);
+        const json = await res.json();
+        const rawItems = (json.data && json.data.items) || json.items || [];
+        const items = rawItems.map((it) => ({
+          subjectId: String(it.subjectId || it.id || ""),
+          title: it.title || it.name || "Untitled",
+          year: (it.releaseTime || it.releaseDate || it.year || "").slice(0, 4),
+          releaseDate: it.releaseDate || it.releaseTime || "",
+          subjectType: it.subjectType || (it.isSeries ? 2 : 1),
+          score: (it.score && it.score !== "N/A") ? it.score : (it.imdbRatingValue || ""),
+          description: it.description || "",
+          cover: it.cover || it.poster || "",
+          poster: it.poster || it.cover || "",
+          detailPath: it.detailPath || ""
+        }));
         if (!items.length) {
           showToast("No MovieBox results found.");
         } else {
           renderMovieBoxCards(items);
         }
-      } catch (_) {
-        showToast("MovieBox search failed. Ensure netlify/functions/moviebox.js is deployed.");
+      } catch (err) {
+        showToast(`MovieBox search failed. Ensure backend is running at ${MOVIEBOX_API_BASE}`);
       } finally {
         btn.disabled = false;
         btn.textContent = "🌐 Search MovieBox";
@@ -378,8 +406,8 @@
       const container = document.getElementById("results");
       for (const item of items.slice(0, 10)) {
         const title = item.title || "Untitled";
-        const year = (item.releaseDate || item.year || "").slice(0, 4);
-        const isSeries = Number(item.subjectType) === 2 || item.mediaType === "series";
+        const year = item.year || (item.releaseDate || "").slice(0, 4);
+        const isSeries = Number(item.subjectType) === 2;
         const typeBadge = isSeries ? `<span class="badge b-series">Series</span>` : `<span class="badge b-movie">Movie</span>`;
         const poster = item.cover || item.poster
           ? `<img class="poster" src="${escapeAttr(item.cover || item.poster)}" alt="Poster" />`
@@ -396,15 +424,14 @@
               <div class="card-head">
                 <div><span class="title">${escapeAttr(title)}</span> <span class="badge b-moviebox">MovieBox</span> ${typeBadge}</div>
               </div>
-              <div class="meta-line">${year}${item.imdbRatingValue ? ` • <span class="rating">★ ${item.imdbRatingValue}</span>` : ""}</div>
+              <div class="meta-line">${year}${item.score ? ` • <span class="rating">★ ${item.score}</span>` : ""}</div>
               <div class="overview">${escapeAttr(item.description || "")}</div>
               <div class="item-row">
                 <div class="item-name"><span class="badge b-moviebox">Global CDN</span> <span>🎬 ${escapeAttr(title)}</span></div>
                 <div class="actions">
                   ${seEpInputs}
                   <button class="act-resolve js-mb-resolve"
-                    data-id="${escapeAttr(item.subjectId || item.id || "")}"
-                    data-path="${escapeAttr(item.detailPath || "")}"
+                    data-id="${escapeAttr(item.subjectId || "")}"
                     data-title="${escapeAttr(title)}"
                     data-series="${isSeries ? 1 : 0}">⚡ Get Streams</button>
                 </div>
@@ -425,14 +452,45 @@
       btn.disabled = true;
       btn.textContent = "⏳ Fetching...";
       try {
-        const url = `/.netlify/functions/moviebox?action=streams&subjectId=${encodeURIComponent(btn.dataset.id)}&detailPath=${encodeURIComponent(btn.dataset.path)}&se=${se}&ep=${ep}`;
+        const url = `${MOVIEBOX_API_BASE}/stream/${encodeURIComponent(btn.dataset.id)}?season=${se}&episode=${ep}`;
         const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
         const data = await res.json();
-        const streams = data.streams || [];
+        
+        let streams = [];
+        if (Array.isArray(data.streams) && data.streams.length > 0) {
+          streams = data.streams.map((s) => {
+            const rawUrl = s.url || s.playUrl || s.downloadUrl;
+            const cookieParam = s.signCookie || data.cookie || "";
+            const proxyUrl = `${MOVIEBOX_API_BASE}/proxy-media?url=${encodeURIComponent(rawUrl)}${cookieParam ? `&cookie=${encodeURIComponent(cookieParam)}` : ""}`;
+            return {
+              quality: s.quality || (s.resolutions ? `${s.resolutions}p` : "HD"),
+              url: proxyUrl,
+              rawUrl: rawUrl,
+              sizeLabel: s.size ? `${(Number(s.size) / (1024 * 1024)).toFixed(0)} MB` : ""
+            };
+          });
+        } else if (data.url) {
+          const rawUrl = data.url;
+          const cookieParam = data.cookie || "";
+          const proxyUrl = `${MOVIEBOX_API_BASE}/proxy-media?url=${encodeURIComponent(rawUrl)}${cookieParam ? `&cookie=${encodeURIComponent(cookieParam)}` : ""}`;
+          const qualLabel = (data.qualityList && data.qualityList[0]) || (data.isHls ? "HLS" : "HD");
+          const durationLabel = data.duration ? `${Math.round(data.duration / 60)} min` : "";
+          streams = [{
+            quality: qualLabel,
+            url: proxyUrl,
+            rawUrl: rawUrl,
+            sizeLabel: durationLabel
+          }];
+        }
+
         if (!streams.length) {
           showToast("No playable streams returned for this selection.");
           return;
         }
+
         streamsBox.innerHTML = streams.map((s) => {
           const label = `${btn.dataset.title}${isSeries ? ` S${String(se).padStart(2, "0")}E${String(ep).padStart(2, "0")}` : ""} (${s.quality || "MP4"}).mp4`;
           return `
@@ -440,16 +498,16 @@
               <div class="item-name">
                 <span class="badge b-moviebox">MovieBox</span>
                 <span class="badge b-qual">${escapeAttr(s.quality || "HD")}</span>
-                <span>${escapeAttr(s.size || s.sizeLabel || "")}</span>
+                <span>${escapeAttr(s.sizeLabel || "")}</span>
               </div>
               <div class="actions">
-                <button class="act-play js-play" data-url="${escapeAttr(s.url)}" data-name="${escapeAttr(label)}">▶ Watch</button>
-                <button class="act-copy js-copy" data-url="${escapeAttr(s.url)}">Copy</button>
+                <button class="act-play js-play" data-url="${escapeAttr(s.url)}" data-raw="${escapeAttr(s.rawUrl || s.url)}" data-name="${escapeAttr(label)}">▶ Watch</button>
+                <button class="act-copy js-copy" data-url="${escapeAttr(s.rawUrl || s.url)}">Copy</button>
               </div>
             </div>`;
         }).join("");
-      } catch (_) {
-        showToast("Failed to resolve MovieBox streams.");
+      } catch (err) {
+        showToast("Failed to resolve MovieBox streams: " + err.message);
       } finally {
         btn.disabled = false;
         btn.textContent = "⚡ Get Streams";
@@ -523,10 +581,10 @@
             <span class="badge ${it.badgeClass}">${it.serverName}</span>
             ${typeTag}
             ${qualBadge}
-            <span>🎬 ${it.name}</span>
+            <span>🎬 ${escapeAttr(it.name)}</span>
           </div>
           <div class="actions">
-            <button class="act-play js-play" data-url="${escapeAttr(it.url)}" data-name="${escapeAttr(it.name)}">${playLabel}</button>
+            <button class="act-play js-play" data-url="${escapeAttr(it.url)}" data-raw="${escapeAttr(it.url)}" data-name="${escapeAttr(it.name)}">${playLabel}</button>
             <a class="act-open" href="${escapeAttr(it.folderUrl)}" target="_blank">Folder ↗</a>
             <button class="act-copy js-copy" data-url="${escapeAttr(it.url)}">Copy</button>
           </div>
@@ -555,7 +613,7 @@
 
       const groups = new Map();
       for (const item of filtered) {
-        const baseTitleSource = (item.parentName && !/^(movies|series|tv[s-_]series|english|hindi|bangla|korean|foreign|south[s-_]indian|asian|animation|anime|\d{4})$/i.test(item.parentName))
+        const baseTitleSource = (item.parentName && !/^(movies|series|tv[\s-_]series|english|hindi|bangla|korean|foreign|south[\s-_]indian|asian|animation|anime|\d{4})$/i.test(item.parentName))
           ? item.parentName
           : item.name;
         const displayTitle = cleanTitleString(baseTitleSource) || item.name;
@@ -607,7 +665,7 @@
           <div class="poster">🎬</div>
           <div class="card-body">
             <div class="card-head">
-              <div><span class="title">${grp.displayTitle}</span> ${typeBadge} ${tmdbLink}</div>
+              <div><span class="title">${escapeAttr(grp.displayTitle)}</span> ${typeBadge} ${tmdbLink}</div>
               <span class="badge b-folder">${grp.items.length} video${grp.items.length !== 1 ? "s" : ""}</span>
             </div>
             <div class="meta-line">${grp.year || ""}</div>
