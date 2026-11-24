@@ -1063,7 +1063,7 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
     working_cookie = None
     official_quality = quality.lower() if quality else "720p"
 
-def prioritize_h264(st):
+    def prioritize_h264(st):
         u = st.get("url", "").lower()
         q = str(st.get("quality") or "").lower()
         try:
@@ -1145,12 +1145,9 @@ def prioritize_h264(st):
                     working_cookie = st.get("signCookie") or global_cookie or ""
                     break
 
-if not working_stream and prioritized_streams:
+    if not working_stream and prioritized_streams:
         working_stream = prioritized_streams[0]
         working_cookie = working_stream.get("signCookie") or global_cookie or ""
-
-
-
 
     # PRIORITY: Resource Mirrors (UGC/Dubs)
     if not working_stream:
