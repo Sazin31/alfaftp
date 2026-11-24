@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="MovieBox Unofficial API Backend")
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root_health():
     """Lightweight Render/Uvicorn health endpoint."""
     return {"status": "ok", "service": "moviebox-internal-api"}
