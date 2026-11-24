@@ -57,7 +57,6 @@
     .modal-title { font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .close-btn { background: #ef4444; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
     video { width: 100%; max-height: 75vh; background: #000; border-radius: 8px; }
-    .audio-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; font-size: 0.82rem; color: #cbd5e1; }
     .modal-hint { font-size: 0.8rem; color: #94a3b8; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; border: 2px solid #3b82f6; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 0.92rem; font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.6); z-index: 1000; display: none; text-align: center; max-width: 92vw; }
     .toast.show { display: block; }
@@ -103,15 +102,8 @@
         <button class="close-btn" onclick="closePlayer()">✕ Close</button>
       </div>
       <video id="videoPlayer" controls playsinline></video>
-      <div class="audio-bar">
-        <label for="audioTrackSelect">🔊 Audio:</label>
-        <select id="audioTrackSelect">
-          <option value="0">Default Audio</option>
-        </select>
-        <span id="audioTrackStatus"></span>
-      </div>
       <div class="modal-hint">
-        <span>If audio or video fails to decode in browser, copy the link into VLC or MPC-HC.</span>
+        <span>If video or audio fails to play in browser, copy the link into VLC or MPC-HC.</span>
         <button class="act-copy" id="modalCopyBtn">📋 Copy Stream Link</button>
       </div>
     </div>
@@ -128,6 +120,7 @@
     const TMDB_API_KEY = "11264c2b67421c4bcb7a3a0752f083dd";
     const DEFAULT_VISIBLE = 4;
     const VIDEO_EXT_REGEX = /\.(mp4|mkv|avi|mov|webm|m4v|ts|flv|wmv)$/i;
+    // MKV is included: the browser tries to play it, and falls back to VLC/MPC-HC if it can't
     const BROWSER_PLAY_REGEX = /\.(mp4|mkv|webm|m4v)(\?|$)/i;
 
     const isAndroid = /Android/i.test(navigator.userAgent);
@@ -156,37 +149,6 @@
         ta.select();
         document.execCommand("copy");
         ta.remove();
-      }
-    }
-
-    function syncAudioTracks(videoEl) {
-      const selectEl = document.getElementById("audioTrackSelect");
-      const statusEl = document.getElementById("audioTrackStatus");
-      selectEl.innerHTML = "";
-      const tracks = videoEl.audioTracks;
-
-      if (tracks && tracks.length > 0) {
-        Array.from(tracks).forEach((track, idx) => {
-          const opt = document.createElement("option");
-          opt.value = String(idx);
-          opt.textContent = track.label || track.language || `Audio Track ${idx + 1}`;
-          opt.selected = Boolean(track.enabled);
-          selectEl.appendChild(opt);
-        });
-        selectEl.onchange = () => {
-          const chosen = Number(selectEl.value);
-          Array.from(tracks).forEach((track, idx) => {
-            track.enabled = idx === chosen;
-          });
-        };
-        statusEl.textContent = `${tracks.length} track(s) available`;
-      } else {
-        const opt = document.createElement("option");
-        opt.value = "0";
-        opt.textContent = "Default / Embedded Track";
-        selectEl.appendChild(opt);
-        selectEl.onchange = null;
-        statusEl.textContent = "Browser hides extra MKV tracks — use MPC-HC/VLC to switch audio";
       }
     }
 
@@ -220,7 +182,7 @@
         showToast("📋 Stream link copied!");
       };
 
-      video.onloadedmetadata = () => syncAudioTracks(video);
+      // If the browser can't decode the file, fall back to an external player
       video.onerror = async () => {
         closePlayer();
         await openExternalOrCopy(url);
@@ -234,6 +196,7 @@
     function closePlayer() {
       const modal = document.getElementById("playerModal");
       const video = document.getElementById("videoPlayer");
+      video.onerror = null;
       video.pause();
       video.removeAttribute("src");
       video.load();
@@ -297,7 +260,7 @@
         const qMatch = path.match(/(2160p|4k|1080p|720p|480p)/i);
         const extMatch = name.match(/\.([a-z0-9]{2,4})$/i);
         const tmdbMatch = path.match(/\[tmdb-(\d+)\]/i);
-        const yearMatch = path.match(/[(.s_]((?:19|20)\d{2})[).s_]/);
+        const yearMatch = path.match(/[(.\s_]((?:19|20)\d{2})[).\s_]/);
 
         const fileUrl = srv.url + parts.map(encodeURIComponent).join("/");
         const folderUrl = srv.url + (folderPath ? folderPath.split("/").map(encodeURIComponent).join("/") : "");
@@ -595,7 +558,7 @@
 
       const groups = new Map();
       for (const item of filtered) {
-        const baseTitleSource = (item.parentName && !/^(movies|series|tv[s-_]series|english|hindi|bangla|korean|foreign|south[s-_]indian|asian|animation|anime|\d{4})$/i.test(item.parentName))
+        const baseTitleSource = (item.parentName && !/^(movies|series|tv[\s_-]series|english|hindi|bangla|korean|foreign|south[\s_-]indian|asian|animation|anime|\d{4})$/i.test(item.parentName))
           ? item.parentName
           : item.name;
         const displayTitle = cleanTitleString(baseTitleSource) || item.name;
