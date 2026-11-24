@@ -102,27 +102,36 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 8000) {
 }
 
 async function searchMovieBox(query) {
-  const q = encodeURIComponent(query.trim());
+  const cleanQuery = query.trim();
+  const q = encodeURIComponent(cleanQuery);
+  const payloadBody = JSON.stringify({
+    keyword: cleanQuery,
+    page: 1,
+    perPage: 20
+  });
   const attempts = [];
 
   for (const host of SEARCH_HOSTS) {
-    const candidateUrls = [
-      `${host}/wefeed-mobile-bff/subject-api/search?keyword=${q}&page=1&perPage=20`,
-      `${host}/wefeed-h5api-bff/subject-api/search?keyword=${q}&page=1&perPage=20`
+    const postEndpoints = [
+      `${host}/wefeed-mobile-bff/subject-api/search`,
+      `${host}/wefeed-h5api-bff/subject-api/search`
     ];
 
-    for (const url of candidateUrls) {
+    for (const url of postEndpoints) {
       try {
         const result = await fetchJsonWithTimeout(url, {
-          method: "GET",
-          headers: MOBILE_HEADERS
+          method: "POST",
+          headers: MOBILE_HEADERS,
+          body: payloadBody
         });
         const rawItems = extractRawItems(result.json);
         attempts.push({
+          method: "POST",
           url,
           status: result.status,
           count: rawItems.length,
-          message: result.json && result.json.message ? result.json.message : undefined
+          message: result.json && result.json.message ? result.json.message : undefined,
+          preview: result.json ? undefined : result.rawPreview
         });
 
         if (result.ok && rawItems.length > 0) {
@@ -134,10 +143,42 @@ async function searchMovieBox(query) {
         }
       } catch (err) {
         attempts.push({
+          method: "POST",
           url,
           error: err.name === "AbortError" ? "timeout" : err.message
         });
       }
+    }
+
+    const getUrl = `${host}/wefeed-h5api-bff/subject-api/search?keyword=${q}&page=1&perPage=20`;
+    try {
+      const result = await fetchJsonWithTimeout(getUrl, {
+        method: "GET",
+        headers: MOBILE_HEADERS
+      });
+      const rawItems = extractRawItems(result.json);
+      attempts.push({
+        method: "GET",
+        url: getUrl,
+        status: result.status,
+        count: rawItems.length,
+        message: result.json && result.json.message ? result.json.message : undefined,
+        preview: result.json ? undefined : result.rawPreview
+      });
+
+      if (result.ok && rawItems.length > 0) {
+        return {
+          items: rawItems.map(normalizeItem).filter((x) => x.title),
+          endpointUsed: getUrl,
+          attempts
+        };
+      }
+    } catch (err) {
+      attempts.push({
+        method: "GET",
+        url: getUrl,
+        error: err.name === "AbortError" ? "timeout" : err.message
+      });
     }
   }
 
