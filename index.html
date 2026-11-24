@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BDIX Media Finder</title>
+<style>
+  * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+  body { background: #0b1120; color: #e2e8f0; margin: 0; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; }
+  h1 { font-size: 1.8rem; margin: 0 0 6px; text-align: center; }
+  h1 span { color: #3b82f6; }
+  .sub { color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px; text-align: center; }
+  .search-wrap { width: 100%; max-width: 880px; }
+  input[type="text"] { width: 100%; padding: 14px 18px; border-radius: 10px; border: 1px solid #334155; background: #1e293b; color: #fff; font-size: 1.05rem; outline: none; }
+  input[type="text"]:focus { border-color: #3b82f6; }
+  .toolbar { width: 100%; max-width: 880px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 14px 0; font-size: 0.85rem; color: #94a3b8; }
+  .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .btn-pill, .srv-pill { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+  .btn-pill.active, .srv-pill.active { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 600; }
+  .btn-global { background: #7c3aed; border: 1px solid #8b5cf6; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+  .btn-global:disabled { opacity: 0.5; cursor: not-allowed; }
+  select, .file-btn { background: #1e293b; border: 1px solid #334155; color: #e2e8f0; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+  .results { width: 100%; max-width: 880px; display: flex; flex-direction: column; gap: 16px; }
+  .card { background: #131c31; border: 1px solid #24324d; border-radius: 12px; padding: 16px; display: flex; gap: 16px; }
+  .poster { width: 100px; height: 150px; border-radius: 8px; object-fit: cover; background: #1e293b; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #475569; font-size: 2rem; }
+  .card-body { flex: 1; min-width: 0; }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+  .title { font-size: 1.15rem; font-weight: 700; color: #fff; }
+  .meta-line { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.82rem; color: #94a3b8; margin-bottom: 8px; }
+  .rating { color: #fbbf24; font-weight: 700; }
+  .overview { font-size: 0.85rem; color: #cbd5e1; line-height: 1.45; margin-bottom: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+  .b-movie { background: #1d4ed8; color: #dbeafe; }
+  .b-series { background: #4338ca; color: #e0e7ff; }
+  .b-folder { background: #334155; color: #e2e8f0; }
+  .b-plusnet { background: #0369a1; color: #e0f2fe; }
+  .b-ctgfun { background: #9333ea; color: #f3e8ff; }
+  .b-moviebox { background: #b45309; color: #fef3c7; }
+  .b-qual { background: #065f46; color: #a7f3d0; }
+  .b-ext { background: #7c2d12; color: #ffedd5; }
+  .b-tmdb { background: #0f766e; color: #ccfbf1; text-decoration: none; }
+  .item-row { display: flex; justify-content: space-between; align-items: center; background: #1b263d; border: 1px solid #2b3b59; padding: 8px 12px; border-radius: 8px; margin-top: 6px; gap: 10px; flex-wrap: wrap; }
+  .item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.88rem; max-width: 100%; flex: 1; min-width: 180px; }
+  .actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+  .act-open { background: #2563eb; color: #fff; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; }
+  .act-play { background: #16a34a; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .act-resolve { background: #d97706; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .act-copy { background: #334155; color: #e2e8f0; border: none; padding: 6px 10px; border-radius: 6px; font-size: 0.82rem; cursor: pointer; }
+  .extra-rows { display: none; }
+  .extra-rows.open { display: block; }
+  .dropdown-btn { width: 100%; margin-top: 8px; background: #1e293b; border: 1px solid #334155; color: #93c5fd; padding: 8px 12px; border-radius: 8px; font-size: 0.84rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .dropdown-btn:hover { background: #27354f; color: #fff; }
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 999; align-items: center; justify-content: center; padding: 16px; }
+  .modal.open { display: flex; }
+  .modal-box { background: #131c31; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 920px; padding: 16px; }
+  .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; }
+  .modal-title { font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .close-btn { background: #ef4444; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+  video { width: 100%; max-height: 75vh; background: #000; border-radius: 8px; }
+  .modal-hint { font-size: 0.8rem; color: #94a3b8; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; border: 2px solid #3b82f6; color: #fff; padding: 12px 20px; border-radius: 10px; font-size: 0.92rem; font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.6); z-index: 1000; display: none; text-align: center; max-width: 92vw; }
+  .toast.show { display: block; }
+  @media (max-width: 600px) {
+    .card { flex-direction: column; }
+    .poster { width: 80px; height: 120px; }
+  }
+</style>
+</head>
+<body>
+
+  <h1>🎬 BDIX <span>Media Finder</span></h1>
+  <div class="sub">Search PlusNet &amp; CTGFun BDIX servers + MovieBox global streams</div>
+
+  <div class="search-wrap">
+    <input type="text" id="q" placeholder="Loading BDIX indexes..." disabled>
+  </div>
+
+  <div class="toolbar">
+    <div class="filters">
+      <label class="file-btn">📂 Load .txt <input type="file" id="fileInput" accept=".txt" multiple hidden></label>
+      <button class="srv-pill active" data-srv="all">All Servers</button>
+      <button class="srv-pill" data-srv="plusnet">PlusNet</button>
+      <button class="srv-pill" data-srv="ctgfun">CTGFun</button>
+      <button class="btn-pill active" data-type="all">All</button>
+      <button class="btn-pill" data-type="movie">Movies</button>
+      <button class="btn-pill" data-type="series">Series</button>
+      <select id="qualFilter">
+        <option value="all">All Qualities</option>
+        <option value="2160p">2160p / 4K</option>
+        <option value="1080p">1080p</option>
+        <option value="720p">720p</option>
+      </select>
+      <button class="btn-global" id="globalSearchBtn">🌐 Search MovieBox</button>
+    </div>
+    <div id="stats">Loading indexes...</div>
+  </div>
+
+  <div class="results" id="results"></div>
+
+  <div class="modal" id="playerModal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title" id="modalTitle">Now Playing</div>
+        <button class="close-btn" onclick="closePlayer()">✕ Close</button>
+      </div>
+      <video id="videoPlayer" controls playsinline></video>
+      <div class="modal-hint">
+        <span>If audio or video fails to decode in browser, copy the link into VLC / MPC-HC.</span>
+        <button class="act-copy" id="modalCopyBtn">📋 Copy Stream Link</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  const SERVERS = [
+    { id: "plusnet", name: "PlusNet", badgeClass: "b-plusnet", url: "https://fs.plus.net.bd/", file: "plusnet.txt" },
+    { id: "ctgfun",  name: "CTGFun",  badgeClass: "b-ctgfun",  url: "https://movie.ctgfun.com/", file: "ctgfun.txt" }
+  ];
+
+  const TMDB_API_KEY = "11264c2b67421c4bcb7a3a0752f083dd";
+  const DEFAULT_VISIBLE = 4;
+  const VIDEO_EXT_REGEX = /\.(mp4|mkv|avi|mov|webm|m4v|ts|flv|wmv)$/i;
+
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const metaCache = new Map();
+  let entries = [];
+  let activeServer = "all";
+  let activeType = "all";
+  let toastTimer = null;
+
+  function showToast(msg) {
+    const el = document.getElementById("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), 4000);
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+  }
+
+  async function handlePlay(url, filename) {
+    const isBrowserPlayable = /\.(mp4|webm|m4v)(\?|$)/i.test(filename) || /\.(mp4|webm|m4v)(\?|$)/i.test(url);
+    if (isBrowserPlayable) {
+      const modal = document.getElementById("playerModal");
+      const video = document.getElementById("videoPlayer");
+      document.getElementById("modalTitle").textContent = filename;
+      document.getElementById("modalCopyBtn").onclick = () => {
+        copyText(url);
+        showToast("📋 Stream link copied!");
+      };
+      video.src = url;
+      modal.classList.add("open");
+      video.play().catch(() => {});
+      return;
+    }
+
+    await copyText(url);
+    if (isAndroid) {
+      showToast("📋 Link copied! Opening Android video player chooser...");
+      const noScheme = url.replace(/^https?:\/\//i, "");
+      const scheme = url.startsWith("https") ? "https" : "http";
+      window.location.href = `intent://${noScheme}#Intent;scheme=${scheme};type=video/*;action=android.intent.action.VIEW;end`;
+    } else if (isIOS) {
+      showToast("📋 Link copied! Opening VLC...");
+      window.location.href = `vlc://${url}`;
+    } else {
+      showToast("📋 Link copied! Open VLC or MPC-HC and press Ctrl+O (or Ctrl+V) to stream.");
+    }
+  }
+
+  function closePlayer() {
+    const modal = document.getElementById("playerModal");
+    const video = document.getElementById("videoPlayer");
+    video.pause();
+    video.src = "";
+    modal.classList.remove("open");
+  }
+
+  document.getElementById("results").addEventListener("click", async (e) => {
+    const playBtn = e.target.closest(".js-play");
+    if (playBtn) {
+      handlePlay(playBtn.dataset.url, playBtn.dataset.name);
+      return;
+    }
+    const copyBtn = e.target.closest(".js-copy");
+    if (copyBtn) {
+      copyText(copyBtn.dataset.url);
+      showToast("📋 Direct video link copied to clipboard!");
+      return;
+    }
+    const mbResolveBtn = e.target.closest(".js-mb-resolve");
+    if (mbResolveBtn) {
+      await resolveMovieBoxStreams(mbResolveBtn);
+      return;
+    }
+    const dropBtn = e.target.closest(".js-dropdown");
+    if (dropBtn) {
+      const cardBody = dropBtn.closest(".card-body");
+      const extraBox = cardBody.querySelector(".extra-rows");
+      const isOpen = extraBox.classList.toggle("open");
+      dropBtn.textContent = isOpen
+        ? `▲ Show less (top ${DEFAULT_VISIBLE})`
+        : `▼ Show all ${dropBtn.dataset.total} videos (+${dropBtn.dataset.hidden} more)`;
+    }
+  });
+
+  function cleanTitleString(str) {
+    return str
+      .replace(/\.(mp4|mkv|avi|mov|webm|m4v|ts|flv|wmv)$/i, "")
+      .replace(/\[.*?\]/g, "")
+      .replace(/[\.\_\-]/g, " ")
+      .replace(/\b(1080p|720p|2160p|4k|480p|webrip|web|dl|bluray|brrip|hdrip|x264|x265|hevc|10bit|aac|dd5|1|myflix|e|box|mal|dts|hindi|tamil|telugu|dual|audio|esub|org|ddn|proper|hdts|camrip)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function parseIndexText(text, srv) {
+    const seenPaths = new Set();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    for (const path of lines) {
+      const uniqueKey = `${srv.id}:${path}`;
+      if (seenPaths.has(uniqueKey)) continue;
+      seenPaths.add(uniqueKey);
+
+      if (path.endsWith("/") || !VIDEO_EXT_REGEX.test(path)) continue;
+
+      const parts = path.split("/");
+      const name = parts[parts.length - 1];
+      const parentName = parts.length > 1 ? parts[parts.length - 2] : name;
+      const folderPath = parts.length > 1 ? parts.slice(0, -1).join("/") + "/" : "";
+
+      const isSeries = /tv[\s\-_]?series|series|season\s*\d+|s\d{2}e\d{2}/i.test(path);
+      const qMatch = path.match(/(2160p|4k|1080p|720p|480p)/i);
+      const extMatch = name.match(/\.([a-z0-9]{2,4})$/i);
+      const tmdbMatch = path.match(/\[tmdb-(\d+)\]/i);
+      const yearMatch = path.match(/[\(\.\s_]((?:19|20)\d{2})[\)\.\s_]/);
+
+      const fileUrl = srv.url + parts.map(encodeURIComponent).join("/");
+      const folderUrl = srv.url + (folderPath ? folderPath.split("/").map(encodeURIComponent).join("/") : "");
+
+      entries.push({
+        serverId: srv.id,
+        serverName: srv.name,
+        badgeClass: srv.badgeClass,
+        path,
+        searchText: path.toLowerCase(),
+        name,
+        parentName,
+        ext: extMatch ? extMatch[1].toUpperCase() : "",
+        type: isSeries ? "series" : "movie",
+        quality: qMatch ? qMatch[1].toLowerCase() : "",
+        tmdbId: tmdbMatch ? tmdbMatch[1] : null,
+        year: yearMatch ? yearMatch[1] : null,
+        url: fileUrl,
+        folderUrl
+      });
+    }
+  }
+
+  async function loadAllIndexes() {
+    await Promise.all(SERVERS.map(async (srv) => {
+      try {
+        const res = await fetch(srv.file);
+        if (!res.ok) return;
+        const text = await res.text();
+        parseIndexText(text, srv);
+      } catch (_) {}
+    }));
+
+    const input = document.getElementById("q");
+    input.disabled = false;
+    if (entries.length > 0) {
+      input.placeholder = `Search ${entries.length.toLocaleString()} BDIX video files (PlusNet & CTGFun)...`;
+      input.focus();
+      render();
+    } else {
+      input.placeholder = "Click Load .txt to select plusnet.txt & ctgfun.txt...";
+      document.getElementById("stats").textContent = "No index loaded";
+    }
+  }
+
+  loadAllIndexes();
+
+  document.getElementById("fileInput").addEventListener("change", (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    entries = [];
+    let remaining = files.length;
+    for (const file of files) {
+      const srv = file.name.toLowerCase().includes("ctg") ? SERVERS[1] : SERVERS[0];
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        parseIndexText(ev.target.result, srv);
+        if (--remaining === 0) {
+          const input = document.getElementById("q");
+          input.disabled = false;
+          input.placeholder = `Search ${entries.length.toLocaleString()} BDIX video files...`;
+          render();
+        }
+      };
+      reader.readAsText(file);
+    }
+  });
+
+  document.querySelectorAll(".srv-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".srv-pill").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeServer = btn.dataset.srv;
+      render();
+    });
+  });
+
+  document.querySelectorAll(".btn-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".btn-pill").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeType = btn.dataset.type;
+      render();
+    });
+  });
+
+  document.getElementById("q").addEventListener("input", render);
+  document.getElementById("qualFilter").addEventListener("change", render);
+
+  document.getElementById("globalSearchBtn").addEventListener("click", async () => {
+    const query = document.getElementById("q").value.trim();
+    if (!query) {
+      showToast("Type a movie or series name first!");
+      return;
+    }
+    const btn = document.getElementById("globalSearchBtn");
+    btn.disabled = true;
+    btn.textContent = "⏳ Searching MovieBox...";
+    try {
+      const res = await fetch(`/.netlify/functions/moviebox?action=search&q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      const items = data.items || [];
+      if (!items.length) {
+        showToast("No MovieBox results found.");
+      } else {
+        renderMovieBoxCards(items);
+      }
+    } catch (_) {
+      showToast("MovieBox search failed. Ensure netlify/functions/moviebox.js is deployed.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "🌐 Search MovieBox";
+    }
+  });
+
+  function renderMovieBoxCards(items) {
+    const container = document.getElementById("results");
+    for (const item of items.slice(0, 10)) {
+      const title = item.title || "Untitled";
+      const year = (item.releaseDate || "").slice(0, 4);
+      const isSeries = Number(item.subjectType) === 2;
+      const typeBadge = isSeries ? `<span class="badge b-series">Series</span>` : `<span class="badge b-movie">Movie</span>`;
+      const poster = item.cover ? `<img class="poster" src="${escapeAttr(item.cover)}" alt="Poster">` : `<div class="poster">🌐</div>`;
+      const seEpInputs = isSeries
+        ? `<input type="number" class="mb-se" value="1" min="1" style="width:52px;padding:4px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#fff" title="Season">
+           <input type="number" class="mb-ep" value="1" min="1" style="width:52px;padding:4px;border-radius:4px;border:1px solid #334155;background:#0f172a;color:#fff" title="Episode">`
+        : "";
+
+      container.insertAdjacentHTML("beforeend", `
+        <div class="card">
+          ${poster}
+          <div class="card-body">
+            <div class="card-head">
+              <div><span class="title">${escapeAttr(title)}</span> <span class="badge b-moviebox">MovieBox</span> ${typeBadge}</div>
+            </div>
+            <div class="meta-line">${year}${item.imdbRatingValue ? ` • ★ ${item.imdbRatingValue}` : ""}</div>
+            <div class="overview">${escapeAttr(item.description || "")}</div>
+            <div class="item-row">
+              <div class="item-name"><span class="badge b-moviebox">Global CDN</span> <span>🎬 ${escapeAttr(title)}</span></div>
+              <div class="actions">
+                ${seEpInputs}
+                <button class="act-resolve js-mb-resolve"
+                  data-id="${escapeAttr(item.subjectId)}"
+                  data-path="${escapeAttr(item.detailPath || "")}"
+                  data-title="${escapeAttr(title)}"
+                  data-series="${isSeries ? "1" : "0"}">⚡ Get Streams</button>
+              </div>
+            </div>
+            <div class="mb-streams"></div>
+          </div>
+        </div>`);
+    }
+  }
+
+  async function resolveMovieBoxStreams(btn) {
+    const cardBody = btn.closest(".card-body");
+    const streamsBox = cardBody.querySelector(".mb-streams");
+    const isSeries = btn.dataset.series === "1";
+    const se = isSeries ? (cardBody.querySelector(".mb-se")?.value || "1") : "0";
+    const ep = isSeries ? (cardBody.querySelector(".mb-ep")?.value || "1") : "0";
+
+    btn.disabled = true;
+    btn.textContent = "⏳ Fetching...";
+    try {
+      const url = `/.netlify/functions/moviebox?action=streams&subjectId=${encodeURIComponent(btn.dataset.id)}&detailPath=${encodeURIComponent(btn.dataset.path)}&se=${se}&ep=${ep}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const streams = data.streams || [];
+      if (!streams.length) {
+        showToast("No playable streams returned for this selection.");
+        return;
+      }
+      streamsBox.innerHTML = streams.map(s => {
+        const label = `${btn.dataset.title}${isSeries ? ` S${String(se).padStart(2, "0")}E${String(ep).padStart(2, "0")}` : ""} (${s.quality || "MP4"}).mp4`;
+        return `
+          <div class="item-row">
+            <div class="item-name">
+              <span class="badge b-moviebox">MovieBox</span>
+              <span class="badge b-qual">${escapeAttr(s.quality || "HD")}</span>
+              <span>${escapeAttr(s.sizeLabel || "")}</span>
+            </div>
+            <div class="actions">
+              <button class="act-play js-play" data-url="${escapeAttr(s.url)}" data-name="${escapeAttr(label)}">▶ Watch</button>
+              <button class="act-copy js-copy" data-url="${escapeAttr(s.url)}">Copy</button>
+            </div>
+          </div>`;
+      }).join("");
+    } catch (_) {
+      showToast("Failed to resolve MovieBox streams.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "⚡ Get Streams";
+    }
+  }
+
+  async function fetchMetadata(grp, cardEl) {
+    if (!TMDB_API_KEY) return;
+    const cacheKey = grp.tmdbId ? `${grp.type}-${grp.tmdbId}` : `${grp.type}-${grp.cleanName}-${grp.year}`;
+    if (metaCache.has(cacheKey)) {
+      applyMetadata(metaCache.get(cacheKey), cardEl);
+      return;
+    }
+    try {
+      const mediaEndpoint = grp.type === "series" ? "tv" : "movie";
+      let data = null;
+      if (grp.tmdbId) {
+        const res = await fetch(`https://api.themoviedb.org/3/${mediaEndpoint}/${grp.tmdbId}?api_key=${TMDB_API_KEY}`);
+        if (res.ok) data = await res.json();
+      } else {
+        const yearParam = grp.year ? (grp.type === "series" ? `&first_air_date_year=${grp.year}` : `&year=${grp.year}`) : "";
+        const res = await fetch(`https://api.themoviedb.org/3/search/${mediaEndpoint}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(grp.cleanName)}${yearParam}`);
+        if (res.ok) {
+          const json = await res.json();
+          data = json.results?.[0] || null;
+        }
+      }
+      if (data) {
+        metaCache.set(cacheKey, data);
+        applyMetadata(data, cardEl);
+      }
+    } catch (_) {}
+  }
+
+  function applyMetadata(data, cardEl) {
+    if (!cardEl) return;
+    if (data.poster_path) {
+      const posterBox = cardEl.querySelector(".poster");
+      if (posterBox) {
+        posterBox.outerHTML = `<img class="poster" src="https://image.tmdb.org/t/p/w200${data.poster_path}" alt="Poster">`;
+      }
+    }
+    const metaLine = cardEl.querySelector(".meta-line");
+    const rating = data.vote_average ? `<span class="rating">★ ${data.vote_average.toFixed(1)}</span>` : "";
+    const genres = data.genres ? data.genres.map(g => g.name).slice(0, 3).join(", ") : "";
+    const date = (data.release_date || data.first_air_date || "").slice(0, 4);
+    metaLine.innerHTML = [rating, date, genres].filter(Boolean).join(" • ");
+    if (data.overview) {
+      cardEl.querySelector(".overview").textContent = data.overview;
+    }
+    if (data.id && !cardEl.querySelector(".b-tmdb")) {
+      const type = data.first_air_date ? "tv" : "movie";
+      const headTitle = cardEl.querySelector(".card-head > div");
+      headTitle.insertAdjacentHTML("beforeend", ` <a class="badge b-tmdb" href="https://www.themoviedb.org/${type}/${data.id}" target="_blank">TMDB ↗</a>`);
+    }
+  }
+
+  function escapeAttr(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  }
+
+  function buildItemRow(it) {
+    const qualBadge = it.quality ? `<span class="badge b-qual">${it.quality}</span>` : "";
+    const typeTag = it.ext ? `<span class="badge b-ext">${it.ext}</span>` : "";
+    const isMp4Webm = /\.(mp4|webm|m4v)$/i.test(it.name);
+    const playLabel = isMp4Webm ? "▶ Watch" : (isAndroid || isIOS ? "▶ Play in App" : "▶ Play (Copy)");
+
+    return `
+      <div class="item-row">
+        <div class="item-name">
+          <span class="badge ${it.badgeClass}">${it.serverName}</span>
+          ${typeTag}
+          ${qualBadge}
+          <span>🎬 ${it.name}</span>
+        </div>
+        <div class="actions">
+          <button class="act-play js-play" data-url="${escapeAttr(it.url)}" data-name="${escapeAttr(it.name)}">${playLabel}</button>
+          <a class="act-open" href="${escapeAttr(it.folderUrl)}" target="_blank">Folder ↗</a>
+          <button class="act-copy js-copy" data-url="${escapeAttr(it.url)}">Copy</button>
+        </div>
+      </div>`;
+  }
+
+  function render() {
+    const t0 = performance.now();
+    const query = document.getElementById("q").value.trim().toLowerCase();
+    const qual = document.getElementById("qualFilter").value;
+    const container = document.getElementById("results");
+
+    if (!query) {
+      container.innerHTML = "";
+      document.getElementById("stats").textContent = `${entries.length.toLocaleString()} BDIX video files ready`;
+      return;
+    }
+
+    const filtered = entries.filter(item => {
+      if (activeServer !== "all" && item.serverId !== activeServer) return false;
+      if (!item.searchText.includes(query)) return false;
+      if (activeType !== "all" && item.type !== activeType) return false;
+      if (qual !== "all" && item.quality !== qual) return false;
+      return true;
+    });
+
+    const groups = new Map();
+    for (const item of filtered) {
+      const baseTitleSource = (item.parentName && !/^(movies?|series|tv[\s\-_]?series|english|hindi|bangla|korean|foreign|south[\s\-_]?indian|asian|animation|anime|\d{4})$/i.test(item.parentName))
+        ? item.parentName
+        : item.name;
+      const displayTitle = cleanTitleString(baseTitleSource) || item.name;
+      const cleanName = displayTitle.replace(/\(?(?:19|20)\d{2}\)?/g, "").trim();
+      const groupId = cleanName.toLowerCase() || displayTitle.toLowerCase();
+
+      if (!groups.has(groupId)) {
+        groups.set(groupId, {
+          displayTitle, cleanName,
+          type: item.type,
+          tmdbId: item.tmdbId,
+          year: item.year,
+          items: []
+        });
+      }
+      const grp = groups.get(groupId);
+      if (!grp.tmdbId && item.tmdbId) grp.tmdbId = item.tmdbId;
+      if (!grp.year && item.year) grp.year = item.year;
+      grp.items.push(item);
+    }
+
+    const ms = (performance.now() - t0).toFixed(2);
+    document.getElementById("stats").textContent = `${groups.size} titles found (${ms} ms)`;
+
+    container.innerHTML = "";
+    let count = 0;
+    for (const [, grp] of groups) {
+      if (count++ >= 30) break;
+
+      grp.items.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+
+      const typeBadge = grp.type === "series"
+        ? `<span class="badge b-series">Series</span>`
+        : `<span class="badge b-movie">Movie</span>`;
+      const tmdbLink = grp.tmdbId
+        ? `<a class="badge b-tmdb" href="https://www.themoviedb.org/${grp.type === "series" ? "tv" : "movie"}/${grp.tmdbId}" target="_blank">TMDB ↗</a>`
+        : "";
+
+      const visibleRows = grp.items.slice(0, DEFAULT_VISIBLE).map(buildItemRow).join("");
+      const hiddenItems = grp.items.slice(DEFAULT_VISIBLE);
+      const extraSection = hiddenItems.length > 0
+        ? `<div class="extra-rows">${hiddenItems.map(buildItemRow).join("")}</div>
+           <button class="dropdown-btn js-dropdown" data-total="${grp.items.length}" data-hidden="${hiddenItems.length}">▼ Show all ${grp.items.length} videos (+${hiddenItems.length} more)</button>`
+        : "";
+
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `
+        <div class="poster">🎬</div>
+        <div class="card-body">
+          <div class="card-head">
+            <div><span class="title">${grp.displayTitle}</span> ${typeBadge} ${tmdbLink}</div>
+            <span class="badge b-folder">${grp.items.length} video${grp.items.length > 1 ? "s" : ""}</span>
+          </div>
+          <div class="meta-line">${grp.year || ""}</div>
+          <div class="overview"></div>
+          ${visibleRows}
+          ${extraSection}
+        </div>`;
+      container.appendChild(card);
+      fetchMetadata(grp, card);
+    }
+  }
+</script>
+</body>
+</html>
