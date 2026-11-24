@@ -103,7 +103,7 @@
       </div>
       <video id="videoPlayer" controls playsinline></video>
       <div class="modal-hint">
-        <span>If video or audio fails to play in browser, copy the link into VLC or MPC-HC.</span>
+        <span>If audio or video fails to decode in browser, copy the link into VLC or MPC-HC.</span>
         <button class="act-copy" id="modalCopyBtn">📋 Copy Stream Link</button>
       </div>
     </div>
@@ -120,7 +120,6 @@
     const TMDB_API_KEY = "11264c2b67421c4bcb7a3a0752f083dd";
     const DEFAULT_VISIBLE = 4;
     const VIDEO_EXT_REGEX = /\.(mp4|mkv|avi|mov|webm|m4v|ts|flv|wmv)$/i;
-    // MKV is included: the browser tries to play it, and falls back to VLC/MPC-HC if it can't
     const BROWSER_PLAY_REGEX = /\.(mp4|mkv|webm|m4v)(\?|$)/i;
 
     const isAndroid = /Android/i.test(navigator.userAgent);
@@ -182,7 +181,6 @@
         showToast("📋 Stream link copied!");
       };
 
-      // If the browser can't decode the file, fall back to an external player
       video.onerror = async () => {
         closePlayer();
         await openExternalOrCopy(url);
@@ -196,7 +194,6 @@
     function closePlayer() {
       const modal = document.getElementById("playerModal");
       const video = document.getElementById("videoPlayer");
-      video.onerror = null;
       video.pause();
       video.removeAttribute("src");
       video.load();
@@ -260,7 +257,7 @@
         const qMatch = path.match(/(2160p|4k|1080p|720p|480p)/i);
         const extMatch = name.match(/\.([a-z0-9]{2,4})$/i);
         const tmdbMatch = path.match(/\[tmdb-(\d+)\]/i);
-        const yearMatch = path.match(/[(.\s_]((?:19|20)\d{2})[).\s_]/);
+        const yearMatch = path.match(/[(.s_]((?:19|20)\d{2})[).s_]/);
 
         const fileUrl = srv.url + parts.map(encodeURIComponent).join("/");
         const folderUrl = srv.url + (folderPath ? folderPath.split("/").map(encodeURIComponent).join("/") : "");
@@ -558,7 +555,7 @@
 
       const groups = new Map();
       for (const item of filtered) {
-        const baseTitleSource = (item.parentName && !/^(movies|series|tv[\s_-]series|english|hindi|bangla|korean|foreign|south[\s_-]indian|asian|animation|anime|\d{4})$/i.test(item.parentName))
+        const baseTitleSource = (item.parentName && !/^(movies|series|tv[s-_]series|english|hindi|bangla|korean|foreign|south[s-_]indian|asian|animation|anime|\d{4})$/i.test(item.parentName))
           ? item.parentName
           : item.name;
         const displayTitle = cleanTitleString(baseTitleSource) || item.name;
