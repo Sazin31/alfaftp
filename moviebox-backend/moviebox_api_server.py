@@ -1063,12 +1063,24 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
     working_cookie = None
     official_quality = quality.lower() if quality else "720p"
 
-    def prioritize_h264(st):
+def prioritize_h264(st):
         u = st.get("url", "").lower()
-        if "h265" in u or "x265" in u or "hev1" in u: return 10
-        if ".mp4" in u: return 0
-        if ".m3u8" in u: return 1
-        return 5
+        q = str(st.get("quality") or "").lower()
+        try:
+            sz = int(st.get("size") or 0)
+        except:
+            sz = 0
+        try:
+            dur = int(st.get("duration") or 0)
+        except:
+            dur = 0
+
+        is_tiny = (0 < sz < 50 * 1024 * 1024) or (0 < dur < 600)
+        tiny_penalty = 50 if is_tiny else 0
+        codec_penalty = 10 if ("h265" in u or "x265" in u or "hev1" in u) else 0
+        proto_rank = 0 if ".mp4" in u else (1 if ".m3u8" in u else 5)
+        res_rank = 0 if "1080" in q else (1 if "720" in q else (2 if "480" in q else 3))
+        return (tiny_penalty, codec_penalty, proto_rank, res_rank)
 
     prioritized_streams = sorted(streams, key=prioritize_h264)
     subtitles_source = data.get("subTitleList", [])
@@ -1132,6 +1144,13 @@ def get_stream(subject_id: str, season: int = 1, episode: int = 1, quality: Opti
                     working_stream = st
                     working_cookie = st.get("signCookie") or global_cookie or ""
                     break
+
+if not working_stream and prioritized_streams:
+        working_stream = prioritized_streams[0]
+        working_cookie = working_stream.get("signCookie") or global_cookie or ""
+
+
+
 
     # PRIORITY: Resource Mirrors (UGC/Dubs)
     if not working_stream:
